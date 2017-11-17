@@ -10,6 +10,7 @@ import org.json.*;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
 import java.text.DateFormat;
+import java.util.Calendar;
 import java.text.SimpleDateFormat;
 import java.util.concurrent.ConcurrentHashMap;
 import java.net.HttpURLConnection;
@@ -25,7 +26,7 @@ public class CurrXRate extends UDF {
 
     private static String delimiter = "|";
     private static ConcurrentHashMap<String, Double> rateMap = new ConcurrentHashMap<String, Double>();
-    private static DateFormat dateToday = new SimpleDateFormat("yyyy/MM/dd");
+    private static DateFormat dateToday = new SimpleDateFormat("yyyy-MM-dd");
 
     private static String getHTML(String urlToRead) {
         URL url;
@@ -85,42 +86,15 @@ public class CurrXRate extends UDF {
 
     }
 
-    public static double currXRateYahooNationalBank(String date, String from, String to){
 
-
-        Double mapRate = rateMap.get(from + delimiter + to);
-        //if (mapRate != null) return mapRate;
-        //String url = "http://download.finance.yahoo.com/d/quotes.csv?s=" + from + to + "=X&f=sl1d1ba&e=.csv";
-        String url = "http://download.finance.yahoo.com/d/quotes.csv?date=" + date + "&s=" + from + to + "=X&f=sl1d1ba&e=.csv";
-        String s = getHTML(url);
-        //System.out.println("s: " + s);
-        Double rate = Double.parseDouble(s.split(",")[1]);
-        rateMap.put(from + delimiter + to, rate);
-        return rate;
-    }
-
-    public static double currXRateYahooNationalBank(String from, String to){
-
-
-        Double mapRate = rateMap.get(from + delimiter + to);
-        Date date = new Date();
-        //if (mapRate != null) return mapRate;
-        //String url = "http://download.finance.yahoo.com/d/quotes.csv?s=" + from + to + "=X&f=sl1d1ba&e=.csv";
-        String url = "http://download.finance.yahoo.com/d/quotes.csv?date=" + dateToday.format(date) + "&s=" + from + to + "=X&f=sl1d1ba&e=.csv";
-        String s = getHTML(url);
-        //System.out.println("s: " + s);
-        Double rate = Double.parseDouble(s.split(",")[1]);
-        rateMap.put(from + delimiter + to, rate);
-        return rate;
-    }
 
     public static double currXRatePolandNationalBank(String date, String from, String to){
 
-        to = "PLN"; //zloty
+        from = "PLN";//Zloty
 
         Double mapRate = rateMap.get(from + delimiter + to);
         //if (mapRate != null) return mapRate;
-        String url = "http://api.nbp.pl/api/exchangerates/rates/a/usd/"+ date+ "/?format=json";
+        String url = "http://api.nbp.pl/api/exchangerates/rates/a/" + to + "/"+ date + "/?format=json";
 
         try {
             String jsonStr = getHTML(url);
@@ -130,7 +104,7 @@ public class CurrXRate extends UDF {
             JSONObject jsonObj1 = new JSONObject(rates);
             double n = Double.parseDouble(jsonObj1.getString("mid"));
             rateMap.put(from + delimiter + to, n);
-            return n;
+            return 1/n;
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -142,13 +116,13 @@ public class CurrXRate extends UDF {
 
     public static double currXRatePolandNationalBank(String from, String to){
 
-        to = "PLN"; //zloty
+        from = "PLN"; //zloty
         Date date = new Date();
         Double mapRate = rateMap.get(from + delimiter + to);
         //if (mapRate != null) return mapRate;
         String dateRaw = dateToday.format(date);
         String dateNow = dateRaw.replaceAll("/", "-");
-        String url = "http://api.nbp.pl/api/exchangerates/rates/a/usd/"+ dateNow + "/?format=json";
+        String url = "http://api.nbp.pl/api/exchangerates/rates/a/" + to + "/"+ dateNow + "/?format=json";
 
         try {
             String jsonStr = getHTML(url);
@@ -158,7 +132,7 @@ public class CurrXRate extends UDF {
             JSONObject jsonObj1 = new JSONObject(rates);
             double n = Double.parseDouble(jsonObj1.getString("mid"));
             rateMap.put(from + delimiter + to, n);
-            return n;
+            return 1/n;
 
         } catch (Exception e) {
             e.printStackTrace();
@@ -171,9 +145,22 @@ public class CurrXRate extends UDF {
     public static double currXRateEuropeanNationalBank(String date, String from, String to){
         /* date parameter must be in format XXXX(year)-XX(month)-XX(day) */
 
+
         Double mapRate = rateMap.get(from + delimiter + to);
+
+
+        Date d = new Date();
+        try {
+            d = dateToday.parse(date);
+        }catch(Exception e){
+            System.out.println("Something went wrong:" + d.toString());
+        }
+        Date goodDate = getPreviousWorkingDay(d);
+        String workingDay = dateToday.format(goodDate);
+        String dateNow = workingDay.replaceAll("/", "-");
+        //System.out.println("dateNow: " + dateNow);
         //if (mapRate != null) return mapRate;
-        String url = "https://sdw-wsrest.ecb.europa.eu/service/data/EXR/D." + from + "." + to + ".SP00.A?startPeriod=" + date + "&endPeriod=" + date;
+        String url = "https://sdw-wsrest.ecb.europa.eu/service/data/EXR/D." + to + ".EUR.SP00.A?startPeriod=" + dateNow + "&endPeriod=" + dateNow;
         String s = getHTTPS(url);
         try {
             String jsonStr = getHTTPS(url);
@@ -203,16 +190,19 @@ public class CurrXRate extends UDF {
         return rate;
     }
 
+
+
     public static double currXRateEuropeanNationalBank(String from, String to){
         /* date parameter must be in format XXXX(year)-XX(month)-XX(day) */
 
         Double mapRate = rateMap.get(from + delimiter + to);
         //if (mapRate != null) return mapRate;
         Date date = new Date();
-        String dateRaw = dateToday.format(date);
-        String dateNow = dateRaw.replaceAll("/", "-");
+        Date goodDate = getPreviousWorkingDay(date);
+        String workingDay = dateToday.format(goodDate);
+        String dateNow = workingDay.replaceAll("/", "-");
 
-        String url = "https://sdw-wsrest.ecb.europa.eu/service/data/EXR/D." + from + "." + to + ".SP00.A?startPeriod=" + dateNow + "&endPeriod=" + dateNow;
+        String url = "https://sdw-wsrest.ecb.europa.eu/service/data/EXR/D." + to + ".EUR.SP00.A?startPeriod=" + dateNow + "&endPeriod=" + dateNow;
         String s = getHTTPS(url);
         try {
             String jsonStr = getHTTPS(url);
@@ -240,6 +230,71 @@ public class CurrXRate extends UDF {
 
         double rate = 0.0;
         return rate;
+    }
+
+    public static double getFixerRate(String from, String to){
+        Date date = new Date();
+        Date goodDate = getPreviousWorkingDay(date);
+        String workingDay = dateToday.format(goodDate);
+        String dateNow = workingDay.replaceAll("/", "-");
+
+        String url = "https://api.fixer.io/" + dateNow + "?base=" + from;
+
+        try {
+            String jsonStr = getHTML(url);
+            JSONObject jsonObj = new JSONObject(jsonStr);
+            String rates = jsonObj.getString("rates");
+            rates = rates.replaceAll("\\[", "").replaceAll("\\]","");
+            JSONObject jsonObj1 = new JSONObject(rates);
+            double n = Double.parseDouble(jsonObj1.getString(to));
+            rateMap.put(from + delimiter + to, n);
+            return n;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return 0.0;
+    }
+
+    public static double getFixerRate(String date, String from, String to){
+        Date d = new Date();
+        try {
+            d = dateToday.parse(date);
+        }catch(Exception e){
+            System.out.println("Something went wrong:" + d.toString());
+        }
+        Date goodDate = getPreviousWorkingDay(d);
+        String workingDay = dateToday.format(goodDate);
+        String dateNow = workingDay.replaceAll("/", "-");
+
+        String url = "https://api.fixer.io/" + dateNow + "?base=" + from;
+
+        try {
+            String jsonStr = getHTML(url);
+            JSONObject jsonObj = new JSONObject(jsonStr);
+            String rates = jsonObj.getString("rates");
+            rates = rates.replaceAll("\\[", "").replaceAll("\\]","");
+            JSONObject jsonObj1 = new JSONObject(rates);
+            double n = Double.parseDouble(jsonObj1.getString(to));
+            rateMap.put(from + delimiter + to, n);
+            return n;
+
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return 0.0;
+    }
+    public static Date getPreviousWorkingDay(Date date) {
+        Calendar cal = Calendar.getInstance();
+        cal.setTime(date);
+
+        int dayOfWeek;
+        do {
+            cal.add(Calendar.DAY_OF_MONTH, -1);
+            dayOfWeek = cal.get(Calendar.DAY_OF_WEEK);
+        } while (dayOfWeek == Calendar.SATURDAY || dayOfWeek == Calendar.SUNDAY);
+
+        return cal.getTime();
     }
 
 
@@ -250,14 +305,16 @@ public class CurrXRate extends UDF {
         String provider = txt3.toString();
         double rate;
 
-        if(provider.toLowerCase().equals("yahoo")) {
+        if(provider.toLowerCase().equals("default")) {
             if (date == null) {
-                rate = currXRateYahooNationalBank(txt1.toString(), txt2.toString());
+                rate = getFixerRate(txt1.toString(), txt2.toString());
                 return rate;
             }
-            rate = currXRateYahooNationalBank(date.toString(), txt1.toString(), txt2.toString());
+            rate = getFixerRate(date.toString(), txt1.toString(), txt2.toString());
             return rate;
         }
+
+
         if(provider.toLowerCase().equals("poland")) {
             if (date == null) {
                 rate = currXRatePolandNationalBank(txt1.toString(), txt2.toString());
@@ -273,36 +330,40 @@ public class CurrXRate extends UDF {
                 rate = currXRateEuropeanNationalBank(date.toString(), txt1.toString(), txt2.toString());
                 return rate;
         }
-       // double rt = currXRateYahooNationalBank(date, txt1.toString(), txt2.toString());
-        //double europe= currXRateEuropeanNationalBank("2010-10-16", txt1.toString(), txt2.toString());
 
         return 0.0;
     }
 
     public Double evaluate(Text txt1, Text txt2) {
-        DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd");
-        return new CurrXRate().evaluate(new Text(dateFormat.format(new Date()).toString()), txt1, txt2);
+        DateFormat dateFormat = new SimpleDateFormat("yyyy-MM-dd");
+        return new CurrXRate().evaluate(new Text(dateFormat.format(new Date()).toString()), txt1, txt2, new Text("default"));
 
     }
 
     public Double evaluate(Text date, Text txt1, Text txt2) {
-        return new CurrXRate().evaluate(date,txt1,txt2,new Text("Yahoo"));
+        return new CurrXRate().evaluate(date,txt1,txt2,txt2);
     }
+
 
     public static void main(String[] args) {
 
-        CurrXRate cr = new CurrXRate();
 
-        double d = cr.evaluate(new Text("2017-10-26"), new Text("USD"), new Text("EUR"), new Text("yahoo"));
-        System.out.println("Rate: " + d);
-        double rt = currXRateYahooNationalBank("USD", "EUR");
-        double r = currXRatePolandNationalBank("USD", "EUR");
-        double e = currXRateEuropeanNationalBank("USD", "EUR");
-        System.out.println("yahoo no date: " + rt + " poland no date: " + r + " europe no date: " + e);
-        //double poland = currXRatePolandNationalBank("2017-10-26", "USD", "Poland");
-        //double europe= currXRateEuropeanNationalBank("2017-10-24", "USD", "EUR", "Europe");
+        double euronational = currXRateEuropeanNationalBank("2017-11-10"," ", "USD");
+        System.out.println("euronational: " + euronational);
+        double euronational2 = currXRateEuropeanNationalBank( " ", "PLN");
+        System.out.println("euronational2: " + euronational2);
 
-        //rateMap.forEach((k,v)->System.out.println(k + ": " + v));
+
+        double fixerRate = getFixerRate("2017-11-10", "EUR", "USD");
+        System.out.println("Rate: " + fixerRate);
+        double fixerRate2 = getFixerRate("USD", "EUR");
+        System.out.println("Rate: " + fixerRate2);
+        double poland = currXRatePolandNationalBank("2017-10-17", " ", "USD");
+        System.out.println("PLN->USD:" + poland);
+        double polandNoDate = currXRatePolandNationalBank(" ", "USD");
+        System.out.println("No Date PLN->USD:" + polandNoDate);
+        double PLNEUR = getFixerRate("EUR", "PLN");
+        System.out.println("Fixer PLN->EUR:" + PLNEUR);
 
     }
 }
